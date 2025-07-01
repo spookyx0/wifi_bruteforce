@@ -28,10 +28,15 @@ def simulate_hc22000_from_cap(cap_path):
 
 # ================= PMKID CRACKING =================
 stop_cracking = False
+attempt_count = 0
+start_time = None
+
 
 def crack_pmkid(pmkid_file, wordlist, threads=4):
-    global stop_cracking
+    global stop_cracking, attempt_count, start_time
     stop_cracking = False
+    attempt_count = 0
+    start_time = time.time()
 
     with open(pmkid_file, 'r') as f:
         pmkid_hash = None
@@ -49,10 +54,9 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
         return
 
     total = len(wordlist)
-    start_time = time.time()
 
     def try_range(pwlist, tid):
-        global stop_cracking
+        global stop_cracking, attempt_count
         for i, pwd in enumerate(pwlist):
             if stop_cracking:
                 result_label.config(text="Cracking stopped by user")
@@ -60,6 +64,7 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
             pmk = hashlib.pbkdf2_hmac('sha1', pwd.encode(), ssid, 4096, 32)
             pke = b"PMK Name" + ssid
             mic = hmac.new(pmk, pke, hashlib.sha1).hexdigest()[:32]
+            attempt_count += 1
             if mic == pmkid_hash:
                 elapsed = time.time() - start_time
                 winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
@@ -72,7 +77,10 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
             if i % 10 == 0:
                 percent = ((i + tid * len(pwlist)) / total) * 100
                 progress_bar['value'] = percent
-                time_label.config(text=f"Tried: {i} in Thread-{tid} - Time: {time.time()-start_time:.2f}s")
+                elapsed = time.time() - start_time
+                speed = attempt_count / elapsed if elapsed else 0
+                time_left = (total - attempt_count) / speed if speed else 0
+                time_label.config(text=f"Attempts: {attempt_count} | Speed: {speed:.2f}/s | ETA: {time_left:.1f}s")
 
     chunk = len(wordlist) // threads
     for t in range(threads):
@@ -82,7 +90,14 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
 # ================= GUI =================
 window = tk.Tk()
 window.title("WPA2 Cracker - PMKID Support")
-window.geometry("600x520")
+window.geometry("600x550")
+window.configure(bg="#1e1e1e")
+
+style = ttk.Style()
+style.theme_use("default")
+style.configure("TButton", background="#333", foreground="#fff")
+style.configure("TLabel", background="#1e1e1e", foreground="#eee")
+style.configure("TProgressbar", troughcolor="#444", background="#00ff00")
 
 pmkid_path = tk.StringVar()
 wordlist_path = tk.StringVar()
@@ -166,9 +181,9 @@ tk.Label(window, text="PMKID Hash File (.hc22000 or .cap)").pack(pady=4)
 tk.Entry(window, textvariable=pmkid_path, width=60).pack()
 tk.Button(window, text="Browse PMKID or .cap", command=browse_pmkid).pack()
 
-tk.Checkbutton(window, text="Use Generated Wordlist", variable=use_generated).pack(pady=6)
+tk.Checkbutton(window, text="Use Generated Wordlist", variable=use_generated, bg="#1e1e1e", fg="#eee", selectcolor="#1e1e1e").pack(pady=6)
 
-frame = tk.Frame(window)
+frame = tk.Frame(window, bg="#1e1e1e")
 frame.pack()
 tk.Label(frame, text="Charset:").grid(row=0, column=0)
 tk.Entry(frame, textvariable=charset, width=10).grid(row=0, column=1)
@@ -186,9 +201,9 @@ tk.Button(window, text="Start Cracking", command=start, bg="green", fg="white").
 tk.Button(window, text="Stop Cracking", command=stop, bg="red", fg="white").pack(pady=6)
 progress_bar = ttk.Progressbar(window, orient='horizontal', length=500, mode='determinate')
 progress_bar.pack(pady=5)
-time_label = tk.Label(window, text="")
+time_label = tk.Label(window, text="", bg="#1e1e1e", fg="#00ff00")
 time_label.pack()
-result_label = tk.Label(window, text="")
+result_label = tk.Label(window, text="", bg="#1e1e1e", fg="#ffffff")
 result_label.pack()
 
 window.mainloop()

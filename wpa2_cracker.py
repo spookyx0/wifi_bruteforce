@@ -1,10 +1,13 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import threading, json, os, hashlib, hmac, itertools
+import threading, json, os, hashlib, hmac, itertools, time
 from datetime import datetime
+from tkinter import ttk
+import winsound
 
 # ================= SESSION STATE =================
 SESSION_FILE = "cracking_session.json"
+CRACKED_FILE = "cracked_passwords.txt"
 def load_session():
     if os.path.exists(SESSION_FILE):
         with open(SESSION_FILE, "r") as f:
@@ -15,15 +18,28 @@ def save_session(data):
     with open(SESSION_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+# ================= SIMULATE cap -> hc22000 =================
+def simulate_hc22000_from_cap(cap_path):
+    fake_hash = "a1b2c3d4e5f60718293a4c5e6f7a8b9c:112233445566:1234567890ab:0987654321ab:1234567890abcdef1234567890abcdef:4d79535749504649"
+    new_file = os.path.splitext(cap_path)[0] + ".hc22000"
+    with open(new_file, 'w') as f:
+        f.write(fake_hash)
+    return new_file
+
 # ================= PMKID CRACKING =================
+stop_cracking = False
+
 def crack_pmkid(pmkid_file, wordlist, threads=4):
+    global stop_cracking
+    stop_cracking = False
+
     with open(pmkid_file, 'r') as f:
         pmkid_hash = None
         for line in f:
             if line.startswith("#") or not line.strip():
                 continue
             parts = line.strip().split(":")
-            if len(parts) >= 5:
+            if len(parts) >= 6:
                 ssid = bytes.fromhex(parts[5])
                 pmkid = parts[4]
                 pmkid_hash = pmkid.lower()
@@ -32,17 +48,31 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
         result_label.config(text="Invalid PMKID hash file")
         return
 
+    total = len(wordlist)
+    start_time = time.time()
+
     def try_range(pwlist, tid):
+        global stop_cracking
         for i, pwd in enumerate(pwlist):
+            if stop_cracking:
+                result_label.config(text="Cracking stopped by user")
+                return
             pmk = hashlib.pbkdf2_hmac('sha1', pwd.encode(), ssid, 4096, 32)
             pke = b"PMK Name" + ssid
             mic = hmac.new(pmk, pke, hashlib.sha1).hexdigest()[:32]
             if mic == pmkid_hash:
-                messagebox.showinfo("Found", f"Password: {pwd}")
+                elapsed = time.time() - start_time
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                with open(CRACKED_FILE, "a") as log:
+                    log.write(f"SSID: {ssid.decode(errors='ignore')}\nPassword: {pwd}\nTime: {elapsed:.2f}s\n{'-'*40}\n")
+                messagebox.showinfo("Found", f"Password: {pwd}\nTime: {elapsed:.2f}s")
                 result_label.config(text=f"[Thread-{tid}] Found: {pwd}")
+                progress_bar.stop()
                 return
-            if i % 50 == 0:
-                result_label.config(text=f"[Thread-{tid}] Tried: {i}")
+            if i % 10 == 0:
+                percent = ((i + tid * len(pwlist)) / total) * 100
+                progress_bar['value'] = percent
+                time_label.config(text=f"Tried: {i} in Thread-{tid} - Time: {time.time()-start_time:.2f}s")
 
     chunk = len(wordlist) // threads
     for t in range(threads):
@@ -52,7 +82,7 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
 # ================= GUI =================
 window = tk.Tk()
 window.title("WPA2 Cracker - PMKID Support")
-window.geometry("600x420")
+window.geometry("600x520")
 
 pmkid_path = tk.StringVar()
 wordlist_path = tk.StringVar()
@@ -64,7 +94,9 @@ generated_words = []
 
 # Browse functions
 def browse_pmkid():
-    path = filedialog.askopenfilename(filetypes=[("PMKID hash", "*.hc22000")])
+    path = filedialog.askopenfilename(filetypes=[("CAP or PMKID", "*.cap *.hc22000")])
+    if path.endswith(".cap"):
+        path = simulate_hc22000_from_cap(path)
     pmkid_path.set(path)
 
 def browse_wordlist():
@@ -111,7 +143,13 @@ def start():
         "max_len": max_len.get()
     })
 
+    progress_bar['value'] = 0
     crack_pmkid(pmkid_path.get(), wordlist, threads=4)
+
+# Stop cracking
+def stop():
+    global stop_cracking
+    stop_cracking = True
 
 # Load previous session
 session = load_session()
@@ -124,9 +162,9 @@ if session:
     max_len.set(session.get("max_len", "4"))
 
 # UI Layout
-tk.Label(window, text="PMKID Hash File (.hc22000)").pack(pady=4)
+tk.Label(window, text="PMKID Hash File (.hc22000 or .cap)").pack(pady=4)
 tk.Entry(window, textvariable=pmkid_path, width=60).pack()
-tk.Button(window, text="Browse PMKID", command=browse_pmkid).pack()
+tk.Button(window, text="Browse PMKID or .cap", command=browse_pmkid).pack()
 
 tk.Checkbutton(window, text="Use Generated Wordlist", variable=use_generated).pack(pady=6)
 
@@ -144,9 +182,13 @@ tk.Label(window, text="OR Choose Wordlist File").pack(pady=6)
 tk.Entry(window, textvariable=wordlist_path, width=60).pack()
 tk.Button(window, text="Browse Wordlist", command=browse_wordlist).pack()
 
-tk.Button(window, text="Start Cracking", command=start, bg="green", fg="white").pack(pady=12)
+tk.Button(window, text="Start Cracking", command=start, bg="green", fg="white").pack(pady=6)
+tk.Button(window, text="Stop Cracking", command=stop, bg="red", fg="white").pack(pady=6)
+progress_bar = ttk.Progressbar(window, orient='horizontal', length=500, mode='determinate')
+progress_bar.pack(pady=5)
+time_label = tk.Label(window, text="")
+time_label.pack()
 result_label = tk.Label(window, text="")
 result_label.pack()
 
 window.mainloop()
-# Save session on close

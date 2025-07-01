@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import threading, json, os, hashlib, hmac, itertools, time
+import threading, json, os, hashlib, hmac, itertools, time, re
 from datetime import datetime
 from tkinter import ttk
 import winsound
@@ -32,6 +32,11 @@ attempt_count = 0
 start_time = None
 
 
+def match_pattern(pwd, pattern):
+    if not pattern:
+        return True
+    return re.match(pattern, pwd)
+
 def crack_pmkid(pmkid_file, wordlist, threads=4):
     global stop_cracking, attempt_count, start_time
     stop_cracking = False
@@ -61,6 +66,8 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
             if stop_cracking:
                 result_label.config(text="Cracking stopped by user")
                 return
+            if not match_pattern(pwd, pattern_filter.get()):
+                continue
             pmk = hashlib.pbkdf2_hmac('sha1', pwd.encode(), ssid, 4096, 32)
             pke = b"PMK Name" + ssid
             mic = hmac.new(pmk, pke, hashlib.sha1).hexdigest()[:32]
@@ -90,8 +97,9 @@ def crack_pmkid(pmkid_file, wordlist, threads=4):
 # ================= GUI =================
 window = tk.Tk()
 window.title("WPA2 Cracker - PMKID Support")
-window.geometry("600x550")
+window.geometry("600x600")
 window.configure(bg="#1e1e1e")
+pattern_filter = tk.StringVar()
 
 style = ttk.Style()
 style.theme_use("default")
@@ -155,7 +163,8 @@ def start():
         "use_generated": use_generated.get(),
         "charset": charset.get(),
         "min_len": min_len.get(),
-        "max_len": max_len.get()
+        "max_len": max_len.get(),
+        "pattern": pattern_filter.get()
     })
 
     progress_bar['value'] = 0
@@ -175,6 +184,7 @@ if session:
     charset.set(session.get("charset", "abc123"))
     min_len.set(session.get("min_len", "3"))
     max_len.set(session.get("max_len", "4"))
+    pattern_filter.set(session.get("pattern", ""))
 
 # UI Layout
 tk.Label(window, text="PMKID Hash File (.hc22000 or .cap)").pack(pady=4)
@@ -192,6 +202,11 @@ tk.Entry(frame, textvariable=min_len, width=5).grid(row=0, column=3)
 tk.Label(frame, text="Max:").grid(row=0, column=4)
 tk.Entry(frame, textvariable=max_len, width=5).grid(row=0, column=5)
 tk.Button(frame, text="Generate", command=generate_wordlist).grid(row=0, column=6, padx=6)
+
+pattern_frame = tk.Frame(window, bg="#1e1e1e")
+pattern_frame.pack(pady=6)
+tk.Label(pattern_frame, text="Regex Pattern Filter (e.g. ^pass.*123$):").pack()
+tk.Entry(pattern_frame, textvariable=pattern_filter, width=40).pack()
 
 tk.Label(window, text="OR Choose Wordlist File").pack(pady=6)
 tk.Entry(window, textvariable=wordlist_path, width=60).pack()

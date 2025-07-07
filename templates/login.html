@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Login</title>
+</head>
+<body>
+  <h2>Test Login Page</h2>
+  <form method="POST">
+    <label>Username:</label><br>
+    <input type="text" name="username"><br><br>
+
+    <label>Password:</label><br>
+    <input type="password" name="password"><br><br>
+
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><br>
+
+    <label>CAPTCHA (type ABCD):</label><br>
+    <img src="https://dummyimage.com/100x40/000/fff&text=ABCD"><br>
+    <input type="text" name="captcha"><br><br>
+
+    <button type="submit">Login</button>
+  </form>
+</body>
+</html>

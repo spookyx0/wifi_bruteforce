@@ -1,0 +1,9 @@
+{
+    "pmkid_path": "D:/Python Script/handshake.hc22000",
+    "wordlist_path": "D:/Python Script/wordlist.txt",
+    "use_generated": false,
+    "charset": "abc123",
+    "min_len": "3",
+    "max_len": "4",
+    "pattern": "123"
+}
